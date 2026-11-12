@@ -1,0 +1,33 @@
+name: stop-test
+
+services:
+  stop_test:
+    # main의 기존 이미지를 사용하며 자동 다운로드/재빌드는 하지 않는다.
+    image: ${STOP_TEST_IMAGE:-baqu4-main:humble}
+    pull_policy: never
+    container_name: stop_test
+    init: true
+    working_dir: /workspace
+    entrypoint: ["bash", "/workspace/docker/entrypoint.sh"]
+    command: ["bash"]
+    stdin_open: true
+    tty: true
+    # 향후 Ethernet 센서 연결을 위해 host 네트워크 사용.
+    # 현재는 다른 ROS_DOMAIN_ID와 localhost discovery로 main의 ROS 통신과 분리.
+    network_mode: host
+    shm_size: 512m
+    environment:
+      ROS_DOMAIN_ID: ${STOP_TEST_ROS_DOMAIN_ID:-87}
+      ROS_LOCALHOST_ONLY: "1"
+      ROS_LOG_DIR: /workspace/log/ros
+      HISTFILE: /workspace/log/bash_history
+      TZ: Asia/Seoul
+      # 기본 환경 점검에는 GPU와 dashboard 프로세스가 필요 없다.
+      NVIDIA_VISIBLE_DEVICES: void
+    volumes:
+      - type: bind
+        source: .
+        target: /workspace
+        bind:
+          create_host_path: false
+

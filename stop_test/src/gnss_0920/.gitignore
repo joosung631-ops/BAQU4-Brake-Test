@@ -1,0 +1,15 @@
+/build/
+/install/
+/log/
+
+*.bag
+*.bag.active
+*.db3
+*.mcap
+
+.cache/
+.clangd/
+.idea/
+.vscode/
+compile_commands.json
+*~

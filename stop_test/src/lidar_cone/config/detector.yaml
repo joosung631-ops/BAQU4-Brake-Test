@@ -1,0 +1,33 @@
+# Geometry heuristics, not measured physical cone dimensions or a calibration.
+# ROI is in original os_lidar axes: forward=-X, nominal vehicle left=-Y.
+x_min: -30.0
+# Front half-space only; positive X is behind this sensor.
+x_max: 0.0
+y_abs_max: 8.0
+z_min: -3.0
+z_max: 4.0
+range_min: 0.8
+range_max: 35.0
+ground_fit_range: 18.0
+ground_cell_size: 1.2
+ground_distance: 0.07
+ground_max_tilt_deg: 20.0
+ground_min_points: 80
+ransac_iterations: 80
+obstacle_min_height: 0.09
+cluster_radius: 0.20
+cluster_radius_per_m: 0.012
+cluster_radius_max: 0.48
+min_points: 3
+min_rings: 2
+max_points: 600
+min_observed_height: 0.10
+max_observed_height: 0.95
+min_width: 0.015
+max_width: 0.70
+min_top_height: 0.28
+max_top_height: 1.05
+max_bottom_height: 0.38
+# Cone top must be 5 cm below the sensor, along the estimated road normal.
+# Do not replace this with raw z_max=0 on a pitched sensor.
+sensor_top_margin: 0.05

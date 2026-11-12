@@ -1,0 +1,93 @@
+cmake_minimum_required(VERSION 3.8)
+project(control_manager)
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif()
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(rcl_interfaces REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(builtin_interfaces REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(encoder_motor REQUIRED)
+# common observation messages, independent of manual input.
+find_package(vehicle_recorder REQUIRED)
+find_package(rosidl_default_generators REQUIRED)
+rosidl_generate_interfaces(${PROJECT_NAME}
+  "msg/GlobalPose.msg" "msg/MotionState.msg" "msg/LanePose.msg" "msg/ObjectState.msg"
+  "msg/MissionLimit.msg" "msg/MissionMap.msg" "msg/MotionPlan.msg" "msg/VehicleCommand.msg" "msg/ControlStatus.msg"
+  "msg/PauseRequest.msg" "msg/TrafficLight.msg"
+  "msg/LidarObject.msg" "msg/LidarObjects.msg"
+  "msg/PurePursuitDiagnostic.msg" # tuning/overlay geometry.
+  DEPENDENCIES std_msgs nav_msgs builtin_interfaces geometry_msgs)
+rosidl_get_typesupport_target(cpp_typesupport_target ${PROJECT_NAME} rosidl_typesupport_cpp)
+
+add_library(control_core src/core.cxx src/pure_pursuit.cxx src/guidance.cxx src/mission.cxx
+  src/path_geometry.cxx src/pid_lateral_controller.cxx src/tracking.cxx src/route_progress.cxx src/speed_profile.cxx)
+target_include_directories(control_core PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include> $<INSTALL_INTERFACE:include>)
+
+function(add_control_node executable class_name)
+  add_executable(${executable} src/main.cxx src/${executable}.cxx)
+  target_compile_definitions(${executable} PRIVATE CONTROL_MANAGER_NODE_CLASS=${class_name})
+  target_link_libraries(${executable} control_core "${cpp_typesupport_target}")
+  # nodes.hxx contains the shared CommandEvent publisher.
+  # ament_target_dependencies(${executable} rclcpp rcl_interfaces std_msgs sensor_msgs nav_msgs)
+  ament_target_dependencies(${executable} rclcpp rcl_interfaces std_msgs sensor_msgs nav_msgs vehicle_recorder)
+  install(TARGETS ${executable} RUNTIME DESTINATION lib/${PROJECT_NAME})
+endfunction()
+add_control_node(sensor_interface_node SensorInterfaceNode)
+ament_target_dependencies(sensor_interface_node encoder_motor)
+add_control_node(global_state_estimator GlobalStateEstimatorNode)
+add_control_node(lane_state_estimator LanePoseEstimatorNode)
+add_control_node(path_planning_node PathPlanningNode)
+add_control_node(object_manager_node ObjectManagerNode)
+add_control_node(mission_based_limit_node MissionBasedLimitNode)
+add_control_node(motion_planning_node MotionPlanningNode)
+add_control_node(motion_control_node MotionControlNode)
+add_control_node(control_selector_node ControlSelectorNode)
+add_control_node(vehicle_interface_node VehicleInterfaceNode)
+install(PROGRAMS scripts/global_path_provider scripts/control_console DESTINATION lib/${PROJECT_NAME})
+install(FILES scripts/global_path_map.py DESTINATION lib/${PROJECT_NAME})
+
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  add_test(NAME test_global_path_map
+    COMMAND ${Python3_EXECUTABLE} -B ${CMAKE_CURRENT_SOURCE_DIR}/test/test_global_path_map.py)
+  ament_add_gtest(test_control_core test/test_control_core.cxx)
+  target_link_libraries(test_control_core control_core)
+  ament_add_gtest(test_speed_profile test/test_speed_profile.cxx)
+  target_link_libraries(test_speed_profile control_core)
+  ament_add_gtest(test_guidance test/test_guidance.cxx)
+  target_link_libraries(test_guidance control_core)
+  ament_add_gtest(test_mission test/test_mission.cxx)
+  target_link_libraries(test_mission control_core)
+  ament_add_gtest(test_tracking test/test_tracking.cxx)
+  target_link_libraries(test_tracking control_core)
+  # curvature-aware PP geometry and response horizon.
+  ament_add_gtest(test_mission_pure_pursuit test/test_mission_pure_pursuit.cxx)
+  target_link_libraries(test_mission_pure_pursuit control_core)
+  ament_add_gtest(test_route_progress test/test_route_progress.cxx)
+  target_link_libraries(test_route_progress control_core)
+  ament_add_gtest(test_ingress test/test_ingress.cxx)
+  target_link_libraries(test_ingress control_core "${cpp_typesupport_target}")
+  ament_add_gtest(test_stopped_heading test/test_stopped_heading.cxx)
+  target_link_libraries(test_stopped_heading control_core)
+endif()
+install(TARGETS control_core EXPORT control_coreTargets ARCHIVE DESTINATION lib LIBRARY DESTINATION lib)
+install(DIRECTORY include/ DESTINATION include)
+install(DIRECTORY config launch DESTINATION share/${PROJECT_NAME})
+install(FILES README.md LICENSE DESTINATION share/${PROJECT_NAME})
+# install the mission PP geometry/tuning report as well.
+install(FILES doc/guidance_modes.md doc/state_split.md doc/sensor_ingress.md doc/estimators.md doc/command_path.md doc/terminal_console.md doc/mission_pure_pursuit.md DESTINATION share/${PROJECT_NAME}/doc)
+ament_export_targets(control_coreTargets HAS_LIBRARY_TARGET)
+# shared CommandEvent appears in installed node headers.
+# ament_export_dependencies(rosidl_default_runtime rclcpp rcl_interfaces std_msgs sensor_msgs nav_msgs)
+ament_export_dependencies(rosidl_default_runtime rclcpp rcl_interfaces std_msgs sensor_msgs nav_msgs vehicle_recorder geometry_msgs)
+ament_package()

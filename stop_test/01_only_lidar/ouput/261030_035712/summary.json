@@ -1,0 +1,50 @@
+{
+  "completed_at": "2026-10-30T03:57:12.576108+09:00",
+  "max_speed_kph": 32.85633200000001,
+  "reason": "stop_row_braking",
+  "stop_confirmed": true,
+  "started": 51103.50077482,
+  "brake_time": 51113.900811912,
+  "stopped_since": 51117.302673635,
+  "confirmed_at": 51117.820754685,
+  "config": {
+    "publish_cmd": true,
+    "prediction_url": "http://127.0.0.1:8080/api/brake/prediction",
+    "lidar_x_m": 0.559,
+    "lidar_y_m": 0.0,
+    "lidar_yaw_offset_deg": 0.0,
+    "steering_zero_deg": 0.0,
+    "wheel_diameter_m": 0.47,
+    "front_from_lidar_m": 1.438,
+    "stop_margin_m": 2.0,
+    "reaction_s": 0.3,
+    "brake_decel_mps2": 3.0,
+    "brake_motor_ramp_enabled": false,
+    "brake_motor_ramp_35_to_zero_s": 2.0,
+    "sensor_timeout_s": 0.35,
+    "max_accel_kphps": 5.0
+  },
+  "speeds": {
+    "max_speed": 31,
+    "use_high_speed": true,
+    "high_speed": 31,
+    "low_speed": 15,
+    "blind_start_kph": 10,
+    "blind_start_timeout_s": 2,
+    "line_confirm_frames": 3
+  },
+  "origin_m": [
+    0.25918434472488416,
+    0.003966673507921015
+  ],
+  "initial_direction": [
+    0.3958051385210712,
+    0.9183345209237839
+  ],
+  "displacement_definition": "GNSS position minus start position, projected onto initial measured direction (m)",
+  "cone_definition": "Measured cone forward distance relative to LiDAR (m); stop row uses course direction",
+  "motor_definition": "/cmd[1] normalized raw; trans UDP motor RPM = -raw * 891.387",
+  "stop_definition": "Fresh valid GNSS speed <= 0.1 m/s for >= 0.5 s and motor command zero",
+  "published_cmd": true,
+  "warnings": []
+}

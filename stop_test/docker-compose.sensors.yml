@@ -1,0 +1,12 @@
+# main의 센서를 공유할 때만 기본 Compose와 함께 명시적으로 적용합니다.
+# 호스트 프로젝트 루트에서:
+# docker compose -f stop_test/docker-compose.yml -f stop_test/docker-compose.sensors.yml up -d --no-build stop_test
+# 컨테이너의 환경만 준비하며 센서·시험·제어 노드를 자동 실행하지 않습니다.
+# ROS 도메인 공유는 수신 전용 접근 제한이 아니므로 /cmd 발행은 별도 관리합니다.
+services:
+  stop_test:
+    environment:
+      ROS_DOMAIN_ID: "${STOP_TEST_SENSOR_ROS_DOMAIN_ID:-0}"
+      ROS_LOCALHOST_ONLY: "0"
+      # main과 /dev/shm이 분리되어 있으므로 센서 데이터는 UDP로 수신합니다.
+      FASTRTPS_DEFAULT_PROFILES_FILE: /workspace/docker/fastdds-udp.xml

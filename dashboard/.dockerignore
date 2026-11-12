@@ -1,0 +1,20 @@
+# dashboard/만 빌드 컨텍스트로 사용하며, 개발 환경과 로컬 설정은 제외합니다.
+.git
+.env
+.env.*
+!.env.example
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/.venv
+**/venv
+**/node_modules
+**/.pytest_cache
+**/.mypy_cache
+**/.ruff_cache
+**/*.egg-info
+build/
+dist/
+log/
+logs/
+*.log

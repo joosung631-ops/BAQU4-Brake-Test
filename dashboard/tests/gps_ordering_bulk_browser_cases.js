@@ -1,0 +1,36 @@
+async function gpsOrderingBulkBrowserCases(){
+ const $=id=>document.getElementById(id),c=$('gps-order-canvas'),assert=(v,m)=>{if(!v)throw Error(m);};
+ for(let i=0;i<200&&(!c.dataset.pointCount||gpsOrdering.busy);i++)await new Promise(r=>setTimeout(r,25));
+ const r=c.getBoundingClientRect(),scale=Math.min(Math.max(20,r.width-120)/10,Math.max(20,r.height-150)/10);
+ const point=(e,n)=>[r.left+r.width/2+(e-5)*scale,r.top+r.height/2-(n-5)*scale];
+ c.setPointerCapture=()=>{};
+ const event=(type,x,y,button=0)=>c.dispatchEvent(new PointerEvent(type,{clientX:x,clientY:y,button,pointerId:1,bubbles:true}));
+ const box=(a,b,button=0)=>{event('pointerdown',...a,button);event('pointermove',...b,button);event('pointerup',...b,button);};
+ const esc=()=>window.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape'}));
+ const selection=()=>JSON.parse(c.dataset.selectedPoints);
+ const click=(e,n)=>{const p=point(e,n);event('pointerdown',...p);event('pointerup',...p);};
+ box(point(-.5,.5),point(10.5,-.5));
+ assert(JSON.stringify(selection())==='[0,1]','Rectangle selects both matched points');
+ assert($('gps-order-insert').disabled&&!$('gps-order-remove').disabled,'Bulk selection enables removal and disables insertion');
+ box(point(4.5,4.5),point(5.5,3.5));
+ assert(selection().length===4,'Overlapping points are accumulated');
+ box(point(-.5,.5),point(10.5,-.5));assert(selection().length===4,'Repeated drag does not duplicate points');
+ $('gps-order-remove').click();assert(c.dataset.order==='[2]','Mixed selection removes only matched points');
+ assert($('gps-order-remove').disabled,'No matched selection remains');
+ $('gps-order-undo').click();assert(c.dataset.order==='[0,1,2]','One undo restores full bulk removal');
+ esc();assert(selection().length===0&&$('gps-order-remove').disabled,'Escape clears selection');
+ box(point(-.5,.5),point(10.5,-.5));$('gps-order-remove').click();
+ await gpsOrdering.save();assert(window.bulkSaved.order.join(',')==='2','Save retains bulk removal');
+ window.dispatchEvent(new Event('dashboard:modechange'));
+ for(let i=0;i<200&&gpsOrdering.busy;i++)await new Promise(r=>setTimeout(r,25));
+ assert(c.dataset.order==='[2]'&&selection().length===0,'Reload restores order and clears selection');
+ click(10,10);assert(c.dataset.selectedPoint==='2','Single click selects a point');
+ $('gps-order-remove').click();assert(c.dataset.order==='[]','Single point removal works');
+ $('gps-order-undo').click();assert(c.dataset.order==='[2]','Single point undo works');
+ click(0,0);$('gps-order-index').value='1';$('gps-order-insert').click();assert(c.dataset.order==='[0,2]','Manual insertion works');
+ const before=c.dataset.selectedPoints;
+ box(point(0,0),point(1,1),2);assert(c.dataset.selectedPoints===before,'Right drag pans without changing selection');
+ $('gps-order-fit').click();esc();
+ const a=point(-.5,.5),b=point(10.5,-.5);event('pointerdown',...a);event('pointermove',...b);c.dispatchEvent(new PointerEvent('pointercancel',{pointerId:1}));assert(selection().length===0,'Cancelled drag does not select');
+ return 'PASS: rectangle, accumulation, overlap, mixed matching, bulk undo, save/reload, single edits, pan, escape and cancellation';
+}

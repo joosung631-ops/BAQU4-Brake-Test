@@ -1,0 +1,101 @@
+/**:
+  ros__parameters:
+    # Stable wiring / coordinate-frame contract. Runtime choices live in modes/*.yaml.
+    map_frame: map
+    base_frame: base_link
+    topics:
+      # 외부 토픽: 센서 노드 / 외부 Lane AI가 발행, Sensor Interface가 구독
+      gnss: /gnss/odom                # Existing GNSS default, SensorDataQoS
+      imu: /imu/data                 # 미구현: raw relay만 존재, IMU 융합/제어 활용 미구현.
+      depth: /camera_dep/depth/image_raw # 미구현: raw relay만 존재, 거리 판단 미구현.
+      external_lane: ""            # 미구현: 외부 계약·LANE/HYBRID 경로 생성 미구현.
+      # Adapter input type: control_manager/msg/LanePose; confirm external wire type with Lane team.
+      # Supplied values: lateral_error_m, heading_error_rad, confidence, header.stamp.
+      # encoder_motor의 통합 메시지를 GNSS처럼 그대로 relay한다.
+      # 단위·부호·MCU tick·valid 보존. 정규화/합성/WHEEL 추정은 별도 작업.
+      external_motor_feedback: /motor_feedback       # encoder_motor/msg/MotorFeedback
+      external_steering_feedback: /steering_feedback # encoder_motor/msg/SteeringFeedback
+
+      # 외부 인식 결과: Sensor Interface가 수신. 원시 RGB/LiDAR는 구독하지 않음.
+      detect_cone: /sensors/detectCone
+      detect_obstacle: /sensors/detectObstacle
+      detect_traffic: /sensors/detectTraffic
+
+      # Global Path Provider 발행 토픽: 기존 최종 지도 파일을 읽어 발행, Path Planning이 구독
+      # map_file=""이면 파일 제공자 비활성; 대신 외부 nav_msgs/Path 발행자를 연결 가능.
+      global_path: /control/global_path
+      # Global Path Provider 발행: 경로 + 원본 누적거리 + task_sections를 원자적으로 전달.
+      # Mission 구간 정책 활성 시에만 발행, Mission Based Limit만 구독.
+      mission_map: /control/mission_map
+
+      # 외부 토픽: GUI/CLI/수동 명령 adapter가 발행 (이 패키지는 발행자를 기동하지 않음)
+      manual_cmd: /control/manual_cmd # VehicleCommand 필요; keyboard raw 명령의 변환 필요
+      pause_request: /control/pause_request # PauseRequest; Control Selector의 AUTO 일시정지/재개 입력
+
+      # Sensor Interface 발행 토픽 (/control/sensor_interface)
+      sensor_imu: /control/sensors/imu # 미구현: IMU 융합 미구현, relay만 존재.
+      sensor_depth: /control/sensors/depth # 미구현: depth 기반 판단 미구현.
+      lane_observation: /control/lane_observation # 미구현: Lane 경로 생성 미구현.
+      sensor_cone: /control/sensors/cone #구현 예정
+      sensor_obstacle: /control/sensors/obstacle # 구현 미정
+      sensor_traffic: /control/sensors/traffic # traffic_sign 결과 그대로 relay; 제어 판단 미연결.
+      sensor_gnss: /control/sensors/gnss_odom
+      sensor_motor_feedback: /control/sensors/motor_feedback
+      sensor_steering_feedback: /control/sensors/steering_feedback
+
+      # Global State Estimator 발행 토픽 (/control/global_state_estimator)
+      global_pose: /control/global_pose
+      motion_state: /control/motion_state
+
+      # Lane State Estimator 발행 토픽 (/control/lane_state_estimator)
+      lane_pose: /control/lane_pose # 미구현: Lane 제어 미구현, 관측 전달만 존재.
+
+      # Object Manager 발행 토픽 (/control/object_manager)
+      object_state: /control/object_state
+
+      # Path Planning 발행 토픽 (/control/path_planning)
+      reference_path: /control/reference_path
+
+      # Mission Based Limit 발행 토픽 (/control/mission_based_limit)
+      mission_limit: /control/mission_limit
+
+      # Motion Planning 발행 토픽 (/control/motion_planning)
+      motion_plan: /control/motion_plan
+
+      # Motion Control 발행 토픽 (/control/motion_control)
+      auto_cmd: /control/auto_cmd
+      # actual PP target/match/lookahead, observation only.
+      pp_diagnostic: /control/pp_diagnostic
+
+      # Control Selector 발행 토픽 (/control/control_selector)
+      selected_cmd: /control/selected_cmd
+      status: /control/status
+      # GNSS measured stop, separate from command FSM.
+      stop_status: /control/stop_status
+
+      # Vehicle Interface 발행 토픽 (/control/vehicle_interface): 외부 trans 입력
+      actuator_raw: /control/actuator_raw # Float32MultiArray [steering, speed, brake]; 우회전/전진 +
+
+    # 외부 발행자와 동일한 ROS 타입이 필요. 빈 타입은 해당 enabled=false 유지.
+    # Cone/Obstacle 필드는 README에서 미정이므로 임의 메시지를 만들지 않음.
+    perception_types:
+      cone: control_manager/msg/LidarObjects
+      obstacle: ""
+      traffic: control_manager/msg/TrafficLight # baqu_traffic_light 출력과 같은 설치 메시지 사용.
+
+/control/vehicle_interface:
+  ros__parameters:
+    # normalized ±1 -> 등가 조향각 ±17.01 deg / 모터 실제 ±891.387 RPM.
+    # trans는 조향/속도를 float32로 전송하며 최종 RPM 반올림은 UNO에서 수행.
+    trans:
+      steering_full_scale_deg: 17.01
+      motor_full_scale_rpm: 891.387
+      steering_zero_deg: 0.0  # 정렬 시험에서 직진한 보드 조향각; control_console 옵션으로 지정.
+
+/control/global_path_provider:
+  ros__parameters:
+    # 공통 설정은 특정 지도를 선택하지 않음. modes/*.yaml 또는 launch map_file에서 지정.
+    # 입력: gps-final-map v1, 후륜축 중심 경로. 빈 값이면 파일 제공자 비활성.
+    map_file: ""
+    # 외부 GNSS의 GetParameters를 읽기 전용 조회; 실제 datum과 frame으로 위경도 재투영.
+    gnss_node: /gnss_node

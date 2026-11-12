@@ -1,0 +1,5 @@
+# Extended search ROI. Other values inherit DetectorConfig defaults.
+# This increases the search range, not the guaranteed cone detection distance.
+x_min: -50.0
+x_max: 0.0
+range_max: 55.0

@@ -1,0 +1,11 @@
+# HTTP 통계 수신, 웹 정적 파일 제공, WebSocket 전송에 사용할 서버 라이브러리.
+# ROS 의존성은 main 컨테이너의 수집기에만 필요합니다.
+aiohttp==3.14.3
+PyYAML==6.0.3
+
+# 차량 제약 경로 계산 및 JSONC 설정.
+scipy==1.17.0
+json5==0.12.1
+
+# H.264/fMP4 encoder, wheel includes FFmpeg codecs.
+av==17.0.1

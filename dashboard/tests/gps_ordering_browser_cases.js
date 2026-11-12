@@ -1,0 +1,31 @@
+async function gpsProjectBrowserCases(){
+ const $=id=>document.getElementById(id),assert=(v,m)=>{if(!v)throw Error(m);},wait=async f=>{for(let i=0;i<400;i++){if(f())return;await new Promise(r=>setTimeout(r,25));}throw Error('timeout');};
+ const api=gpsProject.api,rv=await api('/api/gps/review');let p=await api('/api/gps/projects/create',{filename:'ordering-browser-'+Date.now()+'.json'});
+ const save=async(stage,payload)=>p=await api('/api/gps/projects/save',{filename:p.filename,revision:p.project.revision,stage,...payload});
+ await save(2,{dataset_id:rv.dataset_id,display:{linear:true,smooth:true}});
+ await save(3,{dataset_id:rv.dataset_id,tracks:rv.tracks.map(t=>({id:t.id,excluded_seq:[]}))});
+ const src=await api('/api/gps/projects/merge-source?filename='+p.filename);
+ await save(4,{source_digest:src.source_digest,tracks:src.source.tracks.map(t=>({id:t.id,groups:t.points.map(p=>[p.seq])}))});
+ const fs=await api('/api/gps/projects/fusion-source?filename='+p.filename);
+ await save(5,{source_digest:fs.source_digest,groups:fs.points.map(p=>[p.id]),radius_m:.5});
+ const original=JSON.stringify(p.project.stages['6']);
+ window.gpsProject={get current(){return p;},beforeStep:async()=>true,api,save};
+ await dashboardModes.setBuildStep('ordering');const c=$('gps-order-canvas');await wait(()=>c.dataset.pointCount==='4'&&!gpsOrdering.busy);
+ assert($('gps-order-reference').options.length===2,'Reference limited to selected recordings');
+ $('gps-order-distance').value='1';$('gps-order-auto').click();await wait(()=>c.dataset.labelCount==='3'&&!gpsOrdering.busy);
+ assert(c.dataset.order==='[0,1,2]','Automatic reference order and unmatched point');
+ const data=await api('/api/gps/projects/order-source?filename='+p.filename),ref=data.references.find(t=>t.id===$('gps-order-reference').value),all=[...data.points,...ref.curve_segments.flat()];
+ const es=all.map(p=>p.e),ns=all.map(p=>p.n),a=Math.min(...es),b=Math.max(...es),d=Math.min(...ns),e=Math.max(...ns),r=c.getBoundingClientRect();
+ const scale=Math.max(.0001,Math.min(Math.max(20,r.width-120)/Math.max(1,b-a),Math.max(20,r.height-150)/Math.max(1,e-d)));
+ c.setPointerCapture=()=>{};
+ const click=i=>{const p=data.points[i],x=r.left+r.width/2+(p.e-(a+b)/2)*scale,y=r.top+r.height/2-(p.n-(d+e)/2)*scale;for(const type of ['pointerdown','pointerup'])c.dispatchEvent(new PointerEvent(type,{clientX:x,clientY:y,pointerId:1,button:0,bubbles:true}));assert(c.dataset.selectedPoint===String(i),'Point click '+i);};
+ click(2);$('gps-order-index').value='1';$('gps-order-insert').click();assert(c.dataset.order==='[2,0,1]','Existing point inserted at first position');
+ click(3);$('gps-order-index').value='2';$('gps-order-insert').click();assert(c.dataset.order==='[2,3,0,1]'&&c.dataset.labelCount==='4','Unmatched point manually inserted');
+ assert($('gps-order-selection').textContent.includes('최단 거리'),'Selected point distance');
+ $('gps-order-undo').click();assert(c.dataset.order==='[2,0,1]','Undo insertion');
+ $('gps-order-index').value='99';$('gps-order-insert').click();assert(c.dataset.order==='[2,0,1]','Invalid insertion rejected');
+ $('gps-order-index').value='2';$('gps-order-insert').click();await gpsOrdering.save();
+ assert(JSON.stringify(p.project.stages['7'].order)==='[2,3,0,1]','Stage 6 persisted');assert(JSON.stringify(p.project.stages['6'])===original,'Source coordinates untouched');
+ await dashboardModes.setBuildStep('ordering');await wait(()=>!gpsOrdering.busy&&c.dataset.labelCount==='4');assert(c.dataset.order==='[2,3,0,1]','Saved ordering restored');
+ return 'Reference selection, distance threshold, labels, manual insertion, unmatched insertion, undo, validation, save and reload: passed';
+}

@@ -1,0 +1,51 @@
+Panels:
+  - Class: rviz_common/Displays
+    Name: Displays
+Visualization Manager:
+  Class: ""
+  Global Options:
+    Background Color: 20; 24; 30
+    Fixed Frame: os_lidar
+    Frame Rate: 30
+  Displays:
+    - Class: rviz_default_plugins/Axes
+      Name: Sensor axes
+      Enabled: true
+      Reference Frame: os_lidar
+      Length: 3
+      Radius: 0.03
+    - Class: rviz_default_plugins/PointCloud2
+      Name: Original LiDAR
+      Enabled: true
+      Topic:
+        Value: /lidar/points
+        History Policy: Keep Last
+        Depth: 1
+        Reliability Policy: Best Effort
+        Durability Policy: Volatile
+      Queue Size: 1
+      Size (m): 0.025
+      Style: Points
+      Position Transformer: XYZ
+      Color Transformer: AxisColor
+      Axis: Z
+      Autocompute Value Bounds: true
+    - Class: rviz_default_plugins/MarkerArray
+      Name: Cone boxes in sensor axes
+      Enabled: true
+      Topic:
+        Value: /lidar/cones/markers
+        History Policy: Keep Last
+        Depth: 1
+        Reliability Policy: Best Effort
+        Durability Policy: Volatile
+  Views:
+    Current:
+      Class: rviz_default_plugins/Orbit
+      Distance: 25
+      Pitch: 0.65
+      Yaw: 2.6
+      Focal Point:
+        X: -5
+        Y: 0
+        Z: -0.4

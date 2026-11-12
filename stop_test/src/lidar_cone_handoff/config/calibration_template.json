@@ -1,0 +1,55 @@
+{
+  "status": "INCOMPLETE_DO_NOT_USE_AS_CALIBRATED_TRANSFORM",
+  "target_frame": "base_link",
+  "source_frame": "os_lidar",
+  "translation_unit": "m",
+  "equation": "p_base = R_base_from_lidar @ p_lidar + t_base_from_lidar",
+  "T_base_from_os_lidar": null,
+  "documented_lidar_mount": {
+    "x_from_rear_axle_m": 0.559,
+    "x_status": "documented measurement; exact sensor reference point unconfirmed",
+    "y_from_centerline_m": 0.0,
+    "y_status": "assumed, not measured",
+    "height_from_ground_m": 1.224,
+    "height_status": "documented measurement; not t_base.z",
+    "measured_sensor_reference_frame": null,
+    "base_origin_height_from_ground_m": null,
+    "roll_pitch_yaw_rad": null
+  },
+  "recorded_T_os_sensor_from_os_lidar": [
+    [
+      -1,
+      0,
+      0,
+      0
+    ],
+    [
+      0,
+      -1,
+      0,
+      0
+    ],
+    [
+      0,
+      0,
+      1,
+      0.03618
+    ],
+    [
+      0,
+      0,
+      0,
+      1
+    ]
+  ],
+  "nominal_horizontal_axis_mapping_only": {
+    "vehicle_forward": "os_lidar -X",
+    "vehicle_left": "os_lidar -Y if axes level",
+    "sensor_z": "not gravity calibrated"
+  },
+  "timestamp": {
+    "copy_from": "input PointCloud2.header.stamp",
+    "observed_sensor_clock": "TIME_FROM_INTERNAL_OSC",
+    "common_clock_calibration": null
+  }
+}

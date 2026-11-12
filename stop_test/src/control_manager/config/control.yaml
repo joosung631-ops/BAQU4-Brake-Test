@@ -1,0 +1,52 @@
+# 가감속 명령 상한은 vehicle.yaml의 vehicle.limits에서 관리.
+/control/motion_control:
+  ros__parameters:
+    # Motion Control PID 계산 설정
+    # PID 활성화와 Tracking Mode는 modes/*.yaml에서 설정.
+    pid:
+      kp_lateral: 0.0              # rad/m; PLACEHOLDER, NOT field tuned
+      ki_lateral: 0.0              # rad/(m*s); PLACEHOLDER
+      kd_lateral: 0.0              # rad*s/m; PLACEHOLDER
+      kp_heading: 0.0              # rad/rad; PLACEHOLDER
+      integral_limit_m_s: 0.0      # m*s; anti-windup bound, PLACEHOLDER
+      max_dt_s: 0.5               # Software timing policy; excessive dt resets PID
+
+    # Motion Control Pure Pursuit 계산 설정
+    # PURE_PURSUIT uses rear-axle segment projection and speed-adaptive lookahead.
+    # 속도에 따라 Ld가 변하므로 현재 구현도 속도 적응형 Pure Pursuit에 해당함.
+    # gnss_tools와 진행 위치 추적 / 목표점 선택 / 곡률 분모가 다르므로 동일 구현으로 간주하지 않음.
+    lookahead_min_m: 2.0             # TUNE / NOT field validated
+    lookahead_max_m: 6.0             # TUNE
+    lookahead_gain_s: 1.0            # Ld = clamp(min + gain * speed, min, max)
+    # retain the PP steering equation; shorten lookahead at bends.
+    # Ld = clamp(min(Ld_speed, sqrt(8*curvature_error_m/abs(kappa_preview))), Ld_floor, max).
+    # Ld_floor = min(Ld_speed, max(min, speed*minimum_lookahead_time_s)).
+    # Fixed preview/sample distances avoid speed-dependent curvature feedback and point-density bias.
+    # These are software tuning candidates, NOT field-validated bounds on cross-track error.
+    pp:
+      curvature_lookahead_enabled: true # false reproduces the previous speed-only horizon.
+      curvature_error_m: 0.15
+      curvature_preview_m: 6.0
+      curvature_sample_m: 1.0
+      minimum_lookahead_time_s: 0.6 # speed-dependent floor, bounded by the speed-only horizon.
+
+    # Motion Control PID / Pure Pursuit 공통 도착 판정 설정
+    # 실측 wheelbase와 조향각 / 속도 제한은 vehicle.yaml 사용; 중복 기입하지 않음.
+    goal_tolerance_m: 0.3            # TUNE; 남은 경로 / 종점 거리, 통과 시 종점 횡방향 허용 거리.
+
+    # Motion Control GPS 주행 검사 / 최초 heading 확보 설정 (PID / Pure Pursuit 공통)
+    max_cross_track_m: 3.0           # USER_REQUESTED: 경로까지 거리 > 3 m이면 정지.
+    heading_bootstrap_timeout_s: 10.0 # 2026-10-21 요청: 최초 heading 확보 직진 최대 10초.
+
+    # 의도적인 정지 후 재출발: 마지막 유효 yaw로 PP/PID를 계산. 실측·보정 전 software policy.
+    stopped_heading:
+      enabled: true
+      stop_speed_mps: 0.1           # 유효 실측 속도가 이 값 이하일 때 정지 yaw를 고정.
+      reacquire_speed_mps: 0.7      # GNSS min_speed_for_cog와 맞출 것. 새 유효 yaw 우선.
+      max_distance_m: 1.0          # 정지 위치에서 이 거리 초과 시 저장 yaw 사용 종료. 0이면 거리 제한 해제.
+      max_reacquire_time_s: 3.0    # 실측 이동 시작 후 새 yaw 확보 대기 상한; 정지 대기 시간 제외.
+
+    # 지도별 route_progress 프로필은 해당 modes/*.yaml에서 설정.
+    # expected_points / front_end_index / rear_start_index / 검색 범위를 확정한 뒤
+    # 같은 모드의 route_progress_enabled를 true로 변경한다.
+    # 이전 5066점 지도 프로필은 legacy/route_progress_20261015.yaml에 보존.

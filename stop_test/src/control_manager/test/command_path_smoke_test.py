@@ -1,0 +1,191 @@
+#!/usr/bin/env python3
+"""Localhost-only command fixtures; diagnostics are not hardware feedback."""
+import copy
+import math
+import rclpy
+from std_msgs.msg import UInt8
+from rcl_interfaces.srv import SetParameters
+from rclpy.parameter import Parameter
+from control_manager.msg import VehicleCommand, ControlStatus
+from smoke_test import ROOT, SelectorFixture, observe, wait_for, watch_protection_log
+from state_split_smoke_test import start, settle
+
+
+def run():
+    node=rclpy.create_node('command_path_fixture')
+    values=observe(node)
+    pubs={key:node.create_publisher(VehicleCommand,'/control/'+key,10)
+          for key in ['auto_cmd','manual_cmd','selected_cmd']}
+    legacy_modes=node.create_publisher(UInt8,'/control/mode_request',10)
+    active={'auto':True,'manual':True,'invalid_manual':False,'direct':False,'kind':'good',
+            'auto_stamp':'good','manual_stamp':'good'}
+    sent={}
+    def publish():
+        stamp=node.get_clock().now().to_msg()
+        for key,speed,steer in [('auto',.8,.2),('manual',.4,-.1)]:
+            if not active[key]: continue
+            c=VehicleCommand(target_speed_mps=speed,target_steer_rad=steer,
+                             target_brake=False,valid=not (key=='manual' and active['invalid_manual']),
+                             reason='TEST_'+key)
+            c.header.stamp=copy.deepcopy(stamp); c.header.frame_id='base_link'
+            kind=active[key+'_stamp']
+            if kind=='negative': c.header.stamp.sec=-1
+            if kind=='boundary': c.header.stamp.nanosec=1000000000
+            if kind=='noncanonical':
+                c.header.stamp.sec-=1; c.header.stamp.nanosec+=1000000000
+            if kind=='zero': c.header.stamp.sec=c.header.stamp.nanosec=0
+            if kind=='stale': c.header.stamp.sec-=5
+            if kind=='future': c.header.stamp.sec+=5
+            sent[(key,stamp.sec,stamp.nanosec)]=copy.deepcopy(c)
+            pubs[key+'_cmd'].publish(c)
+        if active['direct']:
+            c=VehicleCommand(target_speed_mps=.6,target_steer_rad=.1,target_brake=False,valid=True)
+            c.header.stamp=copy.deepcopy(stamp); c.header.frame_id='base_link'
+            kind=active['kind']
+            if kind=='invalid': c.valid=False
+            if kind=='nan_steer': c.target_steer_rad=float('nan')
+            if kind=='inf_speed': c.target_speed_mps=float('inf')
+            if kind=='speed_limit': c.target_speed_mps=2.1
+            if kind=='steer_limit': c.target_steer_rad=-.6
+            if kind=='reverse': c.target_speed_mps=-.1
+            if kind=='reverse_limit': c.target_speed_mps=-2.1
+            if kind=='brake_with_speed': c.target_brake=True
+            if kind=='stale': c.header.stamp.sec-=5
+            if kind=='future': c.header.stamp.sec+=5
+            if kind=='zero': c.header.stamp.sec=c.header.stamp.nanosec=0
+            if kind=='wrong_frame': c.header.frame_id='map'
+            pubs['selected_cmd'].publish(c)
+    timer=node.create_timer(.05,publish)
+    # selector=SelectorFixture(node,values,label='command_selector')
+    # use the current mode configuration instead of removed config/operation.yaml.
+    selector=SelectorFixture(node,values,ROOT/'config/modes/test.yaml',label='command_selector')
+    wait_for(node,lambda: values['status'].fsm_state==ControlStatus.READY and
+             values.get('selected_cmd') is not None and values['selected_cmd'].reason=='IDLE',
+             'selector reports selected-command status without a Vehicle Interface')
+    interface=start('vehicle_interface','command_interface','operating_limits_verified:=true',
+                    'vehicle.limits.min_steering_deg:='+str(-math.degrees(0.5)),
+                    'vehicle.limits.max_steering_deg:='+str(math.degrees(0.5)),
+                    'vehicle.limits.min_speed_kph:=-7.2', 'vehicle.limits.max_speed_kph:=7.2')
+    protection_probe=watch_protection_log(node,values,interface)
+    # last valid protected steering survives source failures.
+    expected_steering = 0.0
+    def safe():
+        c=values.get('protected_cmd')
+        # return c is not None and not c.valid and c.target_brake and c.target_speed_mps==0 and c.target_steer_rad==0
+        return (c is not None and not c.valid and c.target_brake and c.target_speed_mps==0
+                and abs(c.target_steer_rad - expected_steering) < 1e-4)
+    def choose(mode,speed):
+        nonlocal expected_steering
+        selector.set_mode(mode)
+        wait_for(node,lambda:'status' in values and values['status'].mode==mode and
+                 values.get('protected_cmd') is not None and values['protected_cmd'].valid and
+                 values['protected_cmd'].target_speed_mps==speed,'mode selection '+str(mode))
+        expected=ControlStatus.READY if mode==ControlStatus.IDLE else ControlStatus.DRIVING
+        wait_for(node,lambda: values['status'].fsm_state==expected and
+                 values['status'].reason==values['selected_cmd'].reason,'FSM describes selected command')
+        if mode != ControlStatus.IDLE:
+            expected_steering = .2 if mode == ControlStatus.AUTO else -.1
+    try:
+        wait_for(node,lambda:'protected_cmd' in values and values['protected_cmd'].reason=='IDLE' and
+                 values['protected_cmd'].target_brake and values['protected_cmd'].target_speed_mps==0,
+                 'IDLE emits neutral stop with healthy sources')
+        assert not node.get_subscriptions_info_by_topic('/control/mode_request')
+        client=node.create_client(SetParameters,'/control/control_selector/set_parameters')
+        wait_for(node,client.service_is_ready,'selector parameter service discovered')
+        future=client.call_async(SetParameters.Request(parameters=[
+            Parameter('mode',value='AUTO').to_parameter_msg()]))
+        wait_for(node,future.done,'runtime mode parameter update answered')
+        assert not future.result().results[0].successful
+        node.destroy_client(client)
+        for removed_request in (ControlStatus.AUTO,255): legacy_modes.publish(UInt8(data=removed_request))
+        settle(node,0.3)
+        assert values['status'].mode==ControlStatus.IDLE
+        print('PASS: YAML mode is read-only and removed mode_request has no subscriber or effect',flush=True)
+        for mode,key,speed in [(ControlStatus.AUTO,'auto',.8),(ControlStatus.MANUAL,'manual',.4)]:
+            choose(mode,speed)
+            c=values['selected_cmd']; t=c.header.stamp
+            assert c==sent[(key,t.sec,t.nanosec)]
+            print('PASS: source command fields and measurement stamp preserved: '+key,flush=True)
+            active[key]=False
+            wait_for(node,lambda:safe() and values['selected_cmd'].reason=='SOURCE_UNAVAILABLE',
+                     key+' timeout stops despite other fresh source')
+            assert values['status'].fsm_state==ControlStatus.FAULT
+            active[key]=True
+            wait_for(node,lambda:values['protected_cmd'].valid and values['protected_cmd'].target_speed_mps==speed,
+                     key+' source recovers')
+            for kind in ('negative','boundary','noncanonical','zero','stale','future'):
+                active[key+'_stamp']=kind
+                wait_for(node,lambda:safe() and values['selected_cmd'].reason=='SOURCE_UNAVAILABLE' and
+                         values['status'].fsm_state==ControlStatus.FAULT,
+                         key+' timestamp rejected: '+kind)
+                assert selector.stack.process.poll() is None
+                active[key+'_stamp']='good'
+                wait_for(node,lambda:values['protected_cmd'].valid and
+                         values['protected_cmd'].target_speed_mps==speed,
+                         key+' timestamp recovery without restart: '+kind)
+        choose(ControlStatus.AUTO,.8)
+        active['manual']=False
+        settle(node,.7)
+        assert values['selected_cmd'].valid and values['selected_cmd'].reason=='TEST_auto'
+        print('PASS: AUTO operates without manual input',flush=True)
+        active['manual']=True
+        for kind in ('negative','boundary','noncanonical'):
+            active['manual_stamp']=kind
+            settle(node,.3)
+            assert selector.stack.process.poll() is None
+            assert values['selected_cmd'].valid and values['selected_cmd'].reason=='TEST_auto'
+            print('PASS: malformed unused manual timestamp does not interrupt AUTO: '+kind,flush=True)
+        active['manual_stamp']='good'
+        choose(ControlStatus.MANUAL,.4)
+        active['invalid_manual']=True
+        wait_for(node,lambda:safe() and values['selected_cmd'].reason=='INVALID_SOURCE_COMMAND',
+                 'invalid manual source is neutralized, no AUTO fallback')
+        assert values['status'].fsm_state==ControlStatus.FAULT
+        active['invalid_manual']=False
+        wait_for(node,lambda:values['protected_cmd'].valid,'valid manual source recovers')
+        for mode,speed in [(ControlStatus.AUTO,.8),(ControlStatus.MANUAL,.4),(ControlStatus.IDLE,0.)]:
+            choose(mode,speed)
+        assert not node.get_subscriptions_info_by_topic('/control/estop')
+        assert not node.get_publishers_info_by_topic('/control/estop')
+        print('PASS: removed estop topic has no publisher or subscriber',flush=True)
+        for topic in ['global_pose','motion_state','guidance_status','object_state']:
+            assert not {i.node_name for i in node.get_subscriptions_info_by_topic('/control/'+topic)} & {
+                'control_selector','vehicle_interface'}
+        assert not node.get_publishers_info_by_topic('/control/vehicle_interface/status')
+        assert not node.get_subscriptions_info_by_topic('/control/vehicle_interface/status')
+        assert {i.node_name for i in node.get_subscriptions_info_by_topic('/control/selected_cmd')
+                if i.node_namespace=='/control'}=={'vehicle_interface'}
+        print('PASS: direct command path, no state/object dependencies or Vehicle Interface status topic',flush=True)
+        selector.close(); selector=None
+        wait_for(node,safe,'selector shutdown expires at vehicle interface')
+        active['direct']=True
+        wait_for(node,lambda:values['protected_cmd'].valid,'isolated direct selected command fixture accepted')
+        expected_steering = .1  # direct valid source becomes the hold reference.
+        active['kind']='reverse'
+        wait_for(node,lambda:values['protected_cmd'].valid and values['protected_cmd'].target_speed_mps==-0.1,
+                 'reverse command inside vehicle range accepted')
+        active['kind']='good'
+        wait_for(node,lambda:values['protected_cmd'].valid and values['protected_cmd'].target_speed_mps==0.6,
+                 'forward command recovers')
+        for kind,reason in [('invalid','INVALID_OR_STALE_COMMAND'),
+                            ('nan_steer','INVALID_COMMAND_VALUES'),('inf_speed','INVALID_COMMAND_VALUES'),
+                            ('reverse_limit','COMMAND_OUT_OF_RANGE'),('brake_with_speed','INVALID_COMMAND_VALUES'),
+                            ('speed_limit','COMMAND_OUT_OF_RANGE'),('steer_limit','COMMAND_OUT_OF_RANGE'),
+                            ('stale','INVALID_OR_STALE_COMMAND'),('future','INVALID_OR_STALE_COMMAND'),
+                            ('zero','INVALID_OR_STALE_COMMAND'),('wrong_frame','INVALID_OR_STALE_COMMAND')]:
+            active['kind']=kind
+            wait_for(node,lambda:safe() and values['protected_cmd'].reason==reason,'actuator protection: '+kind)
+            active['kind']='good'
+            wait_for(node,lambda:values['protected_cmd'].valid,'protected command recovers: '+kind)
+        active['direct']=False
+        wait_for(node,safe,'direct selected publisher silence stops actuator boundary')
+        print('ALL COMMAND PATH SMOKE CHECKS PASSED',flush=True)
+    finally:
+        if selector is not None: selector.close()
+        interface.close(); node.destroy_timer(protection_probe); node.destroy_timer(timer); node.destroy_node()
+
+
+if __name__=='__main__':
+    rclpy.init()
+    try: run()
+    finally: rclpy.shutdown()

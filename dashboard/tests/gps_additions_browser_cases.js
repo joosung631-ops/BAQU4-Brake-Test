@@ -1,0 +1,42 @@
+async function additionsBrowserCases(){
+ const $=id=>document.getElementById(id),canvas=$('gps-add-canvas'),assert=(x,m)=>{if(!x)throw Error(m);};
+ const wait=async f=>{for(let i=0;i<500;i++){if(f())return;await new Promise(r=>setTimeout(r,20));}throw Error('Timeout: '+$('gps-add-status').textContent+' / '+$('gps-project-status').textContent);};
+ await wait(()=>window.gpsProject&&window.dashboardModes);
+ await dashboardModes.set('map-build');$('gps-project-method').value='edit';$('gps-project-method').onchange();
+ await wait(()=>[...$('gps-project-files').options].some(o=>JSON.parse(o.value).filename==='browser-manual.json'));
+ $('gps-project-files').value=[...$('gps-project-files').options].find(o=>JSON.parse(o.value).filename==='browser-manual.json').value;
+ $('gps-project-open').click();await wait(()=>gpsProject.current&&!gpsProject.busy);
+ assert($('map-build-step').options.length===12,'twelve workflow stages');
+ assert($('map-build-step').querySelector('option[value="add-points"]').textContent.startsWith('4.'),'new step follows noise removal');
+ await dashboardModes.setBuildStep('add-points');await wait(()=>!gpsAdditions.busy&&canvas.dataset.pointCount==='8');
+ const insert=(lat,lon)=>{$('gps-add-lat').value=lat;$('gps-add-lon').value=lon;$('gps-add-coordinate').click();};
+ insert('','127');assert(canvas.dataset.addedCount==='0','empty coordinate must not create a point');
+ insert('91','127');assert(canvas.dataset.addedCount==='0','invalid latitude must not create a point');
+ insert('37.000015','127.000015');assert(canvas.dataset.addedCount==='1','explicit coordinate creates one point');
+ $('gps-add-delete').click();assert(canvas.dataset.addedCount==='0','delete added point');
+ $('gps-add-undo').click();assert(canvas.dataset.addedCount==='1','undo delete restores position');
+ $('gps-add-undo').click();assert(canvas.dataset.addedCount==='0','undo insertion removes point');
+ canvas.setPointerCapture=()=>{};
+ const click=(x,y)=>{const r=canvas.getBoundingClientRect();canvas.dispatchEvent(new PointerEvent('pointerdown',{clientX:r.left+x,clientY:r.top+y,button:0,pointerId:1,bubbles:true}));canvas.dispatchEvent(new PointerEvent('pointerup',{clientX:r.left+x,clientY:r.top+y,button:0,pointerId:1,bubbles:true}));};
+ // Source first sample is exactly the ENU origin.
+ const r=canvas.getBoundingClientRect(),scale=Number(canvas.dataset.pixelsPerMeter);
+ click(r.width/2-Number(canvas.dataset.centerE)*scale,r.height/2+Number(canvas.dataset.centerN)*scale);
+ assert(canvas.dataset.selectedKey==='raw:1'&&$('gps-add-delete').disabled,'original samples can anchor insertion but cannot be deleted');
+ click(r.width*.73,r.height*.7);assert(canvas.dataset.addedCount==='1','clicking the map creates a WGS84 point');
+ $('gps-add-track').value='1';$('gps-add-track').onchange();insert('37.000025','127.000025');assert(canvas.dataset.addedCount==='2','second recording gets its own point');
+ $('gps-add-reset').click();assert(canvas.dataset.addedCount==='0','clear removes all added points');$('gps-add-undo').click();assert(canvas.dataset.addedCount==='2','undo clear restores all recordings');
+ $('gps-add-save').click();await wait(()=>!gpsAdditions.busy&&canvas.dataset.dirty==='false');
+ const saved=gpsProject.current.project.stages['4'];assert(saved.additions.length===2,'both additions saved');
+ assert(saved.tracks[0].points[1].manual===true,'map point inserted immediately after selected original');
+ assert(saved.tracks[1].points.some(p=>p.manual&&p.lat===37.000025),'explicit latitude persisted without drift');
+ await dashboardModes.setBuildStep('matching');await wait(()=>!gpsMerger.busy&&$('gps-merge-canvas').dataset.pointCount==='10');
+ assert(gpsProject.current.project.stages['4'].additions.length===2,'forward transition preserves additions');
+ await dashboardModes.setBuildStep('fusion');await wait(()=>!gpsFusion.busy&&gpsProject.current.project.stages['5']);
+ assert(gpsProject.current.project.stages['5'].tracks.reduce((n,t)=>n+t.points.length,0)===10,'downstream stage receives all inserted points');
+ const rewind=dashboardModes.setBuildStep('add-points');await wait(()=>$('gps-project-rewind-dialog').open);$('gps-project-rewind-dialog').close('continue');await rewind;
+ await wait(()=>!gpsAdditions.busy&&canvas.dataset.addedCount==='2');assert(!gpsProject.current.project.stages['5'],'rewind preserves stage 4 and removes later stage');
+ $('gps-add-track').value='0';$('gps-add-track').onchange();insert('37.000035','127.000035');
+ await dashboardModes.set('rosbag');assert(gpsProject.current.project.stages['4'].additions.length===3,'leaving mode auto-saves added points');
+ const file=await gpsProject.api('/api/gps/projects/load?filename='+encodeURIComponent(gpsProject.current.filename));assert(file.project.stages['4'].additions.length===3,'saved file reload retains added points');
+ return 'PASS: real API save/reload; map clicks and WGS84 entry; original protection; per-recording anchors; delete/undo/clear; downstream merge; rewind; mode-leave auto-save.';
+}

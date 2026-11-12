@@ -1,0 +1,17 @@
+{
+  "copied_from": "main/src/control_manager",
+  "sha256": {
+    "src/path_geometry.cxx": "6430e7372863332a8db8470c820c1759622459480f4dadd0ac41cfae2cee5bc9",
+    "src/pure_pursuit.cxx": "2cdf571a4aec82a56afc4f80575f0d8ffc32dd4640d06b161e5f78ef7b0f0615",
+    "src/core.cxx": "6b80ebf7078d3addcd6dab388503cbc788ca27d8777358ab9d104c5834aad708",
+    "include/control_manager/core/mission.hxx": "899844152191ead29b6217a6236338e1239d87af45e1d2faa9bac63e5aa27cfd",
+    "include/control_manager/core/types.hxx": "b0341270382a6d1a831f948bcaef2826970b6e43fd85a7002089563b6bd1b12f",
+    "include/control_manager/core/speed_profile.hxx": "4f3f1d6f22d958ca0d93a2dad0cf0683f86cb6631a79616420bdd7716501c046",
+    "include/control_manager/core/lateral_controller.hxx": "3d27a55620c206220f90744c7268be940aa0bc320df229e8dc1718dd0cecd92c",
+    "include/control_manager/core/route_progress.hxx": "2eb920fabac5aad1f12f3ed3c51df323f8d951e18bd2397fc570bf9a3e5e64a0",
+    "include/control_manager/core/planning_interfaces.hxx": "997409dbe7d7819eef4b4e71b157705b34bddba265ab0a22b32710e6843ab38c",
+    "include/control_manager/core/guidance.hxx": "5903fa8bae4f2458eeebcd31b71f3d68123163f2783aeacaeac77e6d23853a05",
+    "include/control_manager/core/stopped_heading.hxx": "9b083600723f1ca52c5c4e137ba67d14feb7cef4b4bf7921294b873acfcfd525",
+    "include/control_manager/core/tracking.hxx": "6537d8323f37de1c662113fa5bfe3da375d296ef547c229a32008e4fab53368e"
+  }
+}

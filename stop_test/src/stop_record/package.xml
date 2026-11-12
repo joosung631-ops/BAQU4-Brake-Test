@@ -1,0 +1,21 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>stop_record</name>
+  <version>0.1.0</version>
+  <description>stop_test 컨테이너 전용 제동 시험 녹화. main/src/record를 복사해 수정했습니다.</description>
+  <maintainer email="dev@example.com">dev</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+  <exec_depend>rclpy</exec_depend>
+  <exec_depend>ros2bag</exec_depend>
+  <exec_depend>rosidl_runtime_py</exec_depend>
+  <!-- 녹화 대상 커스텀 메시지의 타입 지원 (/motor_feedback, /steering_feedback, /vehicle/command_events) -->
+  <exec_depend>encoder_motor</exec_depend>
+  <exec_depend>vehicle_recorder</exec_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

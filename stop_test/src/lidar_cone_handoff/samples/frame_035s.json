@@ -1,0 +1,79 @@
+{
+  "target_bag_relative_s": 35,
+  "bag_relative_s": 34.966291363,
+  "bag_timestamp_ns": 1792811509431580763,
+  "header_stamp": {
+    "sec": 4974,
+    "nanosec": 296869020
+  },
+  "frame_id": "os_lidar",
+  "height": 32,
+  "width": 1024,
+  "point_step": 48,
+  "row_step": 49152,
+  "is_bigendian": false,
+  "is_dense": false,
+  "fields": [
+    {
+      "name": "x",
+      "offset": 0,
+      "datatype": 7,
+      "count": 1
+    },
+    {
+      "name": "y",
+      "offset": 4,
+      "datatype": 7,
+      "count": 1
+    },
+    {
+      "name": "z",
+      "offset": 8,
+      "datatype": 7,
+      "count": 1
+    },
+    {
+      "name": "intensity",
+      "offset": 16,
+      "datatype": 7,
+      "count": 1
+    },
+    {
+      "name": "t",
+      "offset": 20,
+      "datatype": 6,
+      "count": 1
+    },
+    {
+      "name": "reflectivity",
+      "offset": 24,
+      "datatype": 4,
+      "count": 1
+    },
+    {
+      "name": "ring",
+      "offset": 26,
+      "datatype": 4,
+      "count": 1
+    },
+    {
+      "name": "ambient",
+      "offset": 28,
+      "datatype": 4,
+      "count": 1
+    },
+    {
+      "name": "range",
+      "offset": 32,
+      "datatype": 6,
+      "count": 1
+    }
+  ],
+  "finite_nonzero_xyz_points": 12320,
+  "camera_bag_delta_s": 0.003169161,
+  "camera_header_stamp": {
+    "sec": 1792811509,
+    "nanosec": 426731784
+  },
+  "processing": "No filtering, downsampling, coordinate transformation, detection or annotation. PCD removes binary padding only."
+}

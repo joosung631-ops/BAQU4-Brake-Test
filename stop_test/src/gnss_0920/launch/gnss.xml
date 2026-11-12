@@ -1,0 +1,118 @@
+<?xml version="1.0"?>
+<launch>
+  <arg name="source" default="serial" description="serial or file"/>
+  <!-- [TUNE] Confirm receiver device and baud rate with TESTING B-1..B-4. -->
+  <arg name="device" default="/dev/ttyUSB0"/>
+  <arg name="baudrate" default="115200"/>
+  <arg name="nmea_file" default=""/>
+  <!-- [TUNE] sample.nmea is replayed as GGA epochs at this rate. -->
+  <arg name="replay_rate_hz" default="10.0"/>
+  <arg name="replay_loop" default="true"/>
+
+  <!-- Safe default. Do not enable without human approval and UM980 manual review. -->
+  <arg name="configure_on_start" default="false"/>
+  <!-- [TUNE] Only active when configure_on_start is explicitly true. -->
+  <arg name="startup_command_delay_ms" default="100"/>
+
+  <arg name="map_frame" default="map"/>
+  <arg name="base_frame" default="base_link"/>
+  <arg name="gnss_frame" default="gnss"/>
+  <arg name="publish_tf" default="false"/>
+
+  <!-- [TUNE] .nan latches the first valid fix once. Record/follow must share datum. -->
+  <arg name="datum_lat" default=".nan"/>
+  <arg name="datum_lon" default=".nan"/>
+  <arg name="datum_alt" default=".nan"/>
+  <!-- [TUNE] Rear axle centre -> antenna, forward +x and left +y (metres). -->
+  <arg name="antenna_offset_x" default="0.0"/>
+  <arg name="antenna_offset_y" default="0.0"/>
+
+  <!-- [TUNE] Heading and measurement freshness. -->
+  <arg name="min_speed_for_cog" default="0.7"/>
+  <arg name="course_timeout" default="0.5"/>
+  <arg name="heading_hold_timeout" default="3.0"/>
+  <arg name="gst_timeout" default="2.0"/>
+  <arg name="cog_heading_sigma_deg" default="5.0"/>
+  <arg name="heading_hold_growth_deg_per_s" default="10.0"/>
+  <arg name="speed_sigma" default="0.03"/>
+
+  <!-- [TUNE] Axis-wise fallback sigmas; covariance contains their squares. -->
+  <arg name="sigma_rtk_fixed" default="0.02"/>
+  <arg name="sigma_rtk_float" default="0.3"/>
+  <arg name="sigma_dgps" default="0.8"/>
+  <arg name="sigma_spp" default="1.5"/>
+  <arg name="sigma_no_fix" default="1000000.0"/>
+
+  <!-- [TUNE] RTK corrections over NTRIP. Off by default; needs internet on this computer
+       and source:=serial. RTCM is written to the same serial port NMEA is read from. -->
+  <arg name="ntrip_enabled" default="false"/>
+  <!-- [TUNE] NGII setup confirmed to reach RTK fixed with this receiver:
+       RTS1.ngii.go.kr / RTK-RTCM32. Spare: RTS2.ngii.go.kr with VRS-RTCM32.
+       A wrong mountpoint name logs the list the caster offers. -->
+  <arg name="ntrip_host" default="RTS1.ngii.go.kr"/>
+  <arg name="ntrip_port" default="2101"/>
+  <arg name="ntrip_mountpoint" default="RTK-RTCM32"/>
+  <!-- [TUNE] Credentials. Prefer `export NTRIP_USERNAME=... NTRIP_PASSWORD=...` in the
+       shell that runs this launch file. They reach the node through its environment
+       only, never as ROS parameters: a value such as 01012345678 would be re-typed
+       as a number by the parameter YAML and kill the node, and parameters can be read
+       back with `ros2 param get`. -->
+  <arg name="ntrip_username" default="$(env NTRIP_USERNAME '')"/>
+  <arg name="ntrip_password" default="$(env NTRIP_PASSWORD '')"/>
+  <!-- [TUNE] GGA report period / maximum GGA age / link supervision (seconds). -->
+  <arg name="ntrip_gga_interval" default="5.0"/>
+  <arg name="ntrip_gga_max_age" default="10.0"/>
+  <arg name="ntrip_connect_timeout" default="5.0"/>
+  <arg name="ntrip_data_timeout" default="10.0"/>
+  <arg name="ntrip_reconnect_delay" default="2.0"/>
+
+  <!-- Composite launches remap odometry into the localization contract. -->
+  <arg name="odom_topic" default="/gnss/odom"/>
+
+  <node pkg="gnss_0920" exec="gnss_node" name="gnss_node" output="screen">
+    <env name="NTRIP_USERNAME" value="$(var ntrip_username)"/>
+    <env name="NTRIP_PASSWORD" value="$(var ntrip_password)"/>
+    <!-- DNS lookups cannot be interrupted; without this a dead uplink delays Ctrl+C
+         by 10-20 s and ros2 launch escalates to SIGKILL. -->
+    <env name="RES_OPTIONS" value="timeout:1 attempts:1"/>
+    <param name="source" value="$(var source)"/>
+    <param name="device" value="$(var device)"/>
+    <param name="baudrate" value="$(var baudrate)"/>
+    <param name="nmea_file" value="$(var nmea_file)"/>
+    <param name="replay_rate_hz" value="$(var replay_rate_hz)"/>
+    <param name="replay_loop" value="$(var replay_loop)"/>
+    <param name="configure_on_start" value="$(var configure_on_start)"/>
+    <param name="startup_command_delay_ms" value="$(var startup_command_delay_ms)"/>
+    <param name="map_frame" value="$(var map_frame)"/>
+    <param name="base_frame" value="$(var base_frame)"/>
+    <param name="gnss_frame" value="$(var gnss_frame)"/>
+    <param name="publish_tf" value="$(var publish_tf)"/>
+    <param name="datum_lat" value="$(var datum_lat)"/>
+    <param name="datum_lon" value="$(var datum_lon)"/>
+    <param name="datum_alt" value="$(var datum_alt)"/>
+    <param name="antenna_offset_x" value="$(var antenna_offset_x)"/>
+    <param name="antenna_offset_y" value="$(var antenna_offset_y)"/>
+    <param name="min_speed_for_cog" value="$(var min_speed_for_cog)"/>
+    <param name="course_timeout" value="$(var course_timeout)"/>
+    <param name="heading_hold_timeout" value="$(var heading_hold_timeout)"/>
+    <param name="gst_timeout" value="$(var gst_timeout)"/>
+    <param name="cog_heading_sigma_deg" value="$(var cog_heading_sigma_deg)"/>
+    <param name="heading_hold_growth_deg_per_s" value="$(var heading_hold_growth_deg_per_s)"/>
+    <param name="speed_sigma" value="$(var speed_sigma)"/>
+    <param name="sigma_rtk_fixed" value="$(var sigma_rtk_fixed)"/>
+    <param name="sigma_rtk_float" value="$(var sigma_rtk_float)"/>
+    <param name="sigma_dgps" value="$(var sigma_dgps)"/>
+    <param name="sigma_spp" value="$(var sigma_spp)"/>
+    <param name="sigma_no_fix" value="$(var sigma_no_fix)"/>
+    <param name="ntrip_enabled" value="$(var ntrip_enabled)" type="bool"/>
+    <param name="ntrip_host" value="$(var ntrip_host)" type="str"/>
+    <param name="ntrip_port" value="$(var ntrip_port)" type="int"/>
+    <param name="ntrip_mountpoint" value="$(var ntrip_mountpoint)" type="str"/>
+    <param name="ntrip_gga_interval" value="$(var ntrip_gga_interval)" type="float"/>
+    <param name="ntrip_gga_max_age" value="$(var ntrip_gga_max_age)" type="float"/>
+    <param name="ntrip_connect_timeout" value="$(var ntrip_connect_timeout)" type="float"/>
+    <param name="ntrip_data_timeout" value="$(var ntrip_data_timeout)" type="float"/>
+    <param name="ntrip_reconnect_delay" value="$(var ntrip_reconnect_delay)" type="float"/>
+    <remap from="/gnss/odom" to="$(var odom_topic)"/>
+  </node>
+</launch>

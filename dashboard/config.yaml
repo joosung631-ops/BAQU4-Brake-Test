@@ -1,0 +1,111 @@
+# 모드 선택은 표시·정상 판정만 변경합니다. 센서/rosbag 실행은 터미널에서 합니다.
+# 실시간 기준: camera camera + lidar lidar.launch.py + gnss_0920 gnss.xml 기본 토픽 구성.
+# bag 기준: 기본 녹화 프로필 2026-09-20 및 현재 2026-09-20_5. 다른 bag은 녹화 목록이 다를 수 있습니다.
+# default_mode는 첫 접속 기본값이며 이후 브라우저에서 마지막 선택을 기억합니다.
+# groups/topics는 위에서 아래 순서로 표시됩니다.
+# required: true 모두에 양수 Hz가 있어야 정상입니다. RTK 품질이나 데이터 내용 판정은 아닙니다.
+# 기존 required 설정을 유지했으며 이번에 추가한 토픽은 false입니다. 설명을 보고 직접 선택하세요.
+# metadata/tf_static/로그/이벤트는 지속 Hz가 없을 수 있으므로 현재 Hz 필수 판정과 맞지 않습니다.
+# 선택 모드에 미등록된 수신 토픽은 예외로 표시됩니다.
+# 영상 선택창: 아래 토픽에 image: true를 붙이면 해당 모드에서 선택할 수 있습니다.
+# 기본 카메라는 꺼짐입니다. 선택된 영상만 축소·JPEG 변환해 전송합니다.
+
+# 데이터 사용량
+traffic:
+  smoothing_samples: 5 # 시간당 예상에 사용할 최근 초당 값 개수 (1~3600, 1Hz 기준 약 5초)
+camera:
+  fps: 15           # 대시보드 FPS 입력칸 기본값 (5~30, 5단위). 브라우저에서 변경 가능
+  max_width: 640    # 최대 가로/세로 픽셀 (160~1920), 비율 유지
+  jpeg_quality: 65 # JPEG 품질 (10~95)
+default_mode: live
+modes:
+  live:
+    label: 실시간
+    groups:
+      - name: 카메라
+        topics:
+          # 비압축 영상: 차량 내부 영상 처리·RViz2 입력
+          - name: /camera/image_raw
+            image: true
+            required: true
+          # JPEG 압축 영상: 녹화·원격 영상 전송 입력
+          - name: /camera/image_raw/compressed
+            image: true
+            required: true
+      - name: GNSS
+        topics:
+          # 위도·경도·고도 및 위치 불확실성: 지도 위 위치 표시
+          - name: /gnss/fix
+            required: true
+          # 기준점 대비 ENU 위치·추정 방향·속도 및 불확실성: 위치 추정·경로 추종
+          - name: /gnss/odom
+            required: true
+          # NMEA 위치 품질 값: 0=미측위, 1=일반, 2=DGPS, 4=RTK Fixed, 5=RTK Float
+          - name: /gnss/status
+            required: true
+      - name: IMU
+        topics:
+          - {name: /imu/data, required: false}
+          - {name: /imu/rpy, required: false}
+      - name: 차량 피드백
+        topics:
+          - {name: /motor_feedback, required: false}
+          - {name: /steering_feedback, required: false}
+      - name: 기타
+        topics:
+          # 고정 좌표계 변환. 현재 라이다 본체↔측정/IMU 좌표계. 지속 Hz가 없어도 정상
+          - name: /tf_static
+            required: false
+          # 노드 파라미터 생성·변경·삭제 이벤트. 주기 발행 아님
+          - name: /parameter_events
+            required: false
+          # ROS 노드 로그. 로그 발생 시에만 수신
+          - name: /rosout
+            required: false
+  bag:
+    label: ROS bag
+    groups:
+      - name: 카메라
+        topics:
+          # JPEG 압축 영상: 녹화·원격 영상 전송 입력
+          - name: /camera/image_raw/compressed
+            image: true
+            required: true
+          # 별도 republish 실행 시에만 나오는 비압축 영상. 현재 명령의 출력 이름을 유지
+          # rviz2 때문에 따로 추가한건데, 대시보드 완성되면 rviz2를 안쓰게 될 가능성이 높아 추후 제거 예정
+          - name: /camera/replay/image_raw/compressed
+            image: false
+            required: false
+      - name: GNSS
+        topics:
+          # 위도·경도·고도 및 위치 불확실성: 지도 위 위치 표시
+          - name: /gnss/fix
+            required: true
+          # 기준점 대비 ENU 위치·추정 방향·속도 및 불확실성: 위치 추정·경로 추종
+          - name: /gnss/odom
+            required: true
+          # NMEA 위치 품질 값: 0=미측위, 1=일반, 2=DGPS, 4=RTK Fixed, 5=RTK Float
+          - name: /gnss/status
+            required: true
+      - name: IMU
+        topics:
+          - {name: /imu/data, required: false}
+          - {name: /imu/rpy, required: false}
+      - name: 차량 피드백
+        topics:
+          - {name: /motor_feedback, required: false}
+          - {name: /steering_feedback, required: false}
+      - name: 기타
+        topics:
+          # 고정 좌표계 변환. 현재 라이다 본체↔측정/IMU 좌표계. 지속 Hz가 없어도 정상
+          - name: /tf_static
+            required: false
+          # 노드 파라미터 생성·변경·삭제 이벤트. 주기 발행 아님
+          - name: /parameter_events
+            required: false
+          # ROS 노드 로그. 로그 발생 시에만 수신
+          - name: /rosout
+            required: false
+          # rosbag 플레이어가 재생 파일을 전환할 때 내는 이벤트. 녹화 센서 데이터 아님
+          - name: /events/read_split
+            required: false

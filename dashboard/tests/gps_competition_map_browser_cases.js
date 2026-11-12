@@ -1,0 +1,44 @@
+async function gpsCompetitionMapBrowserCases(){
+ const $=id=>document.getElementById(id),assert=(v,m)=>{if(!v)throw Error(m);};
+ const wait=async f=>{for(let i=0;i<600;i++){if(f())return;await new Promise(r=>setTimeout(r,25));}throw Error('timeout');};
+ const status=category=>gpsProject.api('/api/gps/projects/competition-map?category='+category);
+ await dashboardModes.setBuildStep('project');await wait(()=>$('gps-project-files').options.length>0);
+ $('gps-project-method').value='edit';$('gps-project-method').dispatchEvent(new Event('change'));
+ const option=[...$('gps-project-files').options].find(o=>JSON.parse(o.value).filename==='lane-browser.json');assert(option,'fixture found');$('gps-project-files').value=option.value;
+ $('gps-project-open').click();await wait(()=>gpsProject.current&&!gpsProject.busy);
+ await dashboardModes.setBuildStep('export');
+ assert($('gps-export-competition').checked,'Competition checkbox checked by default');
+ assert($('gps-export-competition').parentElement.textContent.trim()==='진짜진짜진짜 맵파일로 할건가요?','Requested checkbox label');
+ $('gps-export-competition').checked=false;$('gps-export-save').click();await wait(()=>!gpsExport.busy);
+ assert(!$('gps-export-competition-dialog').open,'Unchecked export has no selection dialog');
+ const firstExport=gpsProject.current.project.stages['12'].export_filename;
+ assert(!(await status('preliminary')).exists&&!(await status('final')).exists,'Unchecked export creates no fixed maps');
+ $('gps-export-competition').checked=true;$('gps-export-save').click();await wait(()=>$('gps-export-competition-dialog').open);
+ assert(gpsProject.current.project.stages['12'].export_filename!==firstExport,'Ordinary export saved before dialog');
+ assert($('gps-export-competition-confirm').disabled,'Must select a map category');
+ $('gps-export-competition-cancel').click();await wait(()=>!gpsExport.busy);
+ assert(!(await status('preliminary')).exists,'Cancel creates no fixed map');
+ const select=async category=>{$('gps-export-competition-kind').value=category;$('gps-export-competition-kind').dispatchEvent(new Event('change'));await wait(()=>!$('gps-export-competition-confirm').disabled);};
+ const open=async()=>{$('gps-export-save').click();await wait(()=>$('gps-export-competition-dialog').open);};
+ await open();await select('preliminary');assert($('gps-export-competition-message').textContent.includes('추가로 저장'),'New map notice');
+ $('gps-export-competition-confirm').click();await wait(()=>!gpsExport.busy);
+ assert((await status('preliminary')).exists,'Preliminary fixed map created');
+ await open();await select('preliminary');
+ assert($('gps-export-competition-message').textContent.includes('덮어씁니다'),'Existing map overwrite notice');
+ const previous=await status('preliminary');
+ // A different export wins while this browser is looking at the confirmation.
+ await gpsProject.api('/api/gps/projects/competition-map',{category:'preliminary',source_filename:firstExport,expected_digest:previous.digest});
+ $('gps-export-competition-confirm').click();await wait(()=>$('gps-export-competition-message').textContent.includes('변경되었습니다')&&!$('gps-export-competition-confirm').disabled);
+ assert($('gps-export-competition-dialog').open,'Changed map needs renewed confirmation');
+ $('gps-export-competition-confirm').click();await wait(()=>!gpsExport.busy);
+ assert($('gps-export-status').textContent.includes('덮어써서 최신화'),'Confirmed replacement succeeds');
+ const preliminaryExport=gpsProject.current.project.stages['12'].export_filename;
+ await open();await select('final');$('gps-export-competition-confirm').click();await wait(()=>!gpsExport.busy);
+ assert((await status('final')).exists,'Final fixed map created');
+ const finalExport=gpsProject.current.project.stages['12'].export_filename;
+ const before=(await status('final')).digest;
+ await open();await select('final');$('gps-export-competition-cancel').click();await wait(()=>!gpsExport.busy);
+ assert((await status('final')).digest===before,'Cancel overwrite keeps previous fixed map');
+ await dashboardModes.set('none');assert(!$('gps-export-competition-dialog').open,'Leaving mode does not reopen saved export dialog');
+ return {passed:'Default checkbox, ordinary save, cancellation, both categories, overwrite notice, concurrent replacement and renewed confirmation',preliminaryExport,finalExport};
+}

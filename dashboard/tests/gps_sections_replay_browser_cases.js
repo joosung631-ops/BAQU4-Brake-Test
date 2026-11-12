@@ -1,0 +1,35 @@
+async function gpsProjectBrowserCases(){
+ const $=id=>document.getElementById(id),assert=(v,m)=>{if(!v)throw Error(m);},wait=async f=>{for(let i=0;i<1800;i++){if(f())return;await new Promise(r=>setTimeout(r,50));}throw Error('timeout');};
+ await dashboardModes.setBuildStep('project');await wait(()=>$('gps-project-files').options.length>0);
+ $('gps-project-method').value='edit';$('gps-project-method').dispatchEvent(new Event('change'));
+ const option=[...$('gps-project-files').options].find(o=>JSON.parse(o.value).filename==='replay-sections-test.json');assert(option,'fixture');$('gps-project-files').value=option.value;$('gps-project-open').click();await wait(()=>gpsProject.current&&!gpsProject.busy);
+ await dashboardModes.setBuildStep('sections');await wait(()=>!gpsSections.busy&&$('gps-section-bag').options.length>1);
+ const select=$('gps-section-bag'),expectedBags=gpsProject.current.project.stages['2'].bags;
+ assert(JSON.stringify([...select.options].map(o=>o.value).filter(Boolean).sort())===JSON.stringify([...expectedBags].sort()),'Only stage 2 selected bags offered');
+ assert(!$('gps-map-camera-title').closest('aside').hidden,'Camera panel visible during section editing');assert(select.closest('.camera-panel'),'Stage 9 bag selector is in camera panel');
+ select.value=expectedBags[0];select.dispatchEvent(new Event('change'));$('gps-map-camera-toggle').click();await wait(()=>!$('gps-map-play').disabled);$('gps-map-camera-toggle').click();
+ await wait(()=>!$('gps-map-camera-image').hidden&&$('gps-map-camera-image').naturalWidth>0);
+ const c=$('gps-section-canvas'),slider=$('gps-map-time');slider.value=15;slider.dispatchEvent(new Event('input'));await wait(()=>c.dataset.currentEast!==undefined&&!$('gps-map-camera-image').hidden);
+ const raw=await gpsProject.api('/api/gps/source/replay-status'),expected=raw.gps.filter(g=>g.t<=15).at(-1);
+ assert($('gps-map-position').textContent.includes(expected.lat.toFixed(7)),'GPS matches bag timestamp');assert(Math.abs(Number(c.dataset.currentHeading)-expected.heading_rad)<1e-10,'Section map vehicle follows recorded heading');assert(c.dataset.vehicleLength==='2.222','Vehicle geometry shown');
+ const before=Number(slider.value);$('gps-map-frame-next').click();assert(Math.abs(Number(slider.value)-raw.frames.find(t=>t>before+1e-6))<.0006,'Next frame at recorded timestamp');$('gps-map-frame-prev').click();assert(Number(slider.value)<before+.1,'Previous frame');
+ const source=await gpsProject.api('/api/gps/projects/section-source?filename='+encodeURIComponent(gpsProject.current.filename));
+ const all=[...source.edges.left,...source.edges.right],es=all.map(p=>p.e),ns=all.map(p=>p.n),a=Math.min(...es),b=Math.max(...es),d=Math.min(...ns),e=Math.max(...ns),rect=c.getBoundingClientRect(),scale=Math.min((rect.width-120)/Math.max(1,b-a),(rect.height-150)/Math.max(1,e-d));
+ const click=p=>c.dispatchEvent(new MouseEvent('click',{clientX:rect.left+rect.width/2+(p.e-(a+b)/2)*scale,clientY:rect.top+rect.height/2-(p.n-(d+e)/2)*scale,bubbles:true}));
+ $('gps-map-play').click();const t=Number(slider.value);await new Promise(r=>setTimeout(r,1200));
+ click(source.points[100]);click(source.points[300]);$('gps-section-name').value='영상 확인 과제';$('gps-section-description').value='재생하며 설정';$('gps-section-name').dispatchEvent(new Event('input'));assert(!$('gps-section-confirm').disabled,'Editing possible during playback');$('gps-section-confirm').click();
+ assert(Number(slider.value)>t+.5&&$('gps-map-play').textContent==='일시정지','Playback continues while confirming section');assert($('gps-section-list').children.length===1,'Section recorded during playback');
+ $('gps-map-play').click();const paused=Number(slider.value);await new Promise(r=>setTimeout(r,150));assert(Number(slider.value)===paused,'Pause holds position');
+ $('gps-map-camera-toggle').click();assert($('gps-map-camera-image').hidden,'Camera off');$('gps-map-play').click();await new Promise(r=>setTimeout(r,200));assert(Number(slider.value)>paused,'GPS playback with camera off');$('gps-map-play').click();$('gps-map-camera-toggle').click();
+ await dashboardModes.setBuildStep('validation');await wait(()=>!gpsLane.busy&&$('gps-map-bag').options.length>2);assert($('gps-map-play').disabled&&$('gps-map-camera-image').hidden,'Switching stages resets replay');assert(gpsProject.current.project.stages['10'].sections.length===1,'Section autosaved before verification');
+ $('gps-map-bag').value=expectedBags[0];$('gps-map-bag').dispatchEvent(new Event('change'));await wait(()=>!$('gps-map-play').disabled);slider.value=15;slider.dispatchEvent(new Event('input'));await wait(()=>$('gps-lane-canvas').dataset.currentEast!==undefined&&!$('gps-map-camera-image').hidden);assert(Math.abs(Number($('gps-lane-canvas').dataset.currentHeading)-expected.heading_rad)<1e-10,'Validation uses same GPS heading renderer');
+ await dashboardModes.setBuildStep('export');await wait(()=>!gpsLane.busy&&$('gps-map-bag').options.length>2);
+ assert(!$('gps-lane-canvas').closest('[data-center-view]').hidden,'Stage 11 map visible');assert(!$('gps-map-camera-title').closest('aside').hidden,'Stage 11 camera visible');assert($('gps-map-bag').closest('.camera-panel'),'Stage 10/11 selector is in camera panel');
+ const map=$('gps-lane-canvas'),context=map.getContext('2d'),original=context.fillText,labels=[];context.fillText=function(text,...args){labels.push(text);return original.call(this,text,...args);};gpsLane.setCurrentPosition(expected);context.fillText=original;
+ assert(Number(map.dataset.edgeCount)>0,'Estimated lanes visible in stage 11');assert(labels.some(text=>text.includes('영상 확인 과제 시작')),'Section start label displayed');assert(!labels.some(text=>/종료/.test(text)),'Section end labels hidden');
+ $('gps-map-bag').value=expectedBags[0];$('gps-map-bag').dispatchEvent(new Event('change'));await wait(()=>!$('gps-map-play').disabled);slider.value=15;slider.dispatchEvent(new Event('input'));await wait(()=>map.dataset.currentEast!==undefined&&!$('gps-map-camera-image').hidden);
+ assert(Math.abs(Number(map.dataset.currentHeading)-expected.heading_rad)<1e-10,'Stage 11 recorded GPS overlay');$('gps-map-play').click();await new Promise(r=>setTimeout(r,250));assert(Number(slider.value)>15,'Stage 11 playback runs');$('gps-map-play').click();
+ $('gps-export-competition').checked=false;$('gps-export-save').click();await wait(()=>!gpsExport.busy);assert(gpsProject.current.project.stages['12'],'Final save remains available with replay');assert(!map.closest('[data-center-view]').hidden,'Map remains visible after final save');
+ await dashboardModes.set('none');assert($('gps-map-play').disabled&&$('gps-map-camera-image').hidden,'Leaving mode stops replay');
+ return 'Stage 9 selected bag filtering, real camera/GPS replay, frame stepping, playback/pause, camera toggle, simultaneous section editing and stage 10/11 replay, map labels, camera panel selection and export: passed';
+}
